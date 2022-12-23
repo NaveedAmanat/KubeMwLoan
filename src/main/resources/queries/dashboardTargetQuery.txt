@@ -1,0 +1,68 @@
+  SELECT prd.prd_cmnt,
+         COUNT (DISTINCT clnt_seq)
+             act_clnt,
+         MAX (tgt.trgt_clients)
+             trgt_clnt,
+         MAX (tgt.trgt_amt)
+             trgt_amt,
+         (SELECT COUNT (DISTINCT ap.port_seq)
+            FROM mw_loan_app ap
+                 JOIN mw_port port
+                     ON     port.port_seq = ap.port_seq
+                        AND port.crnt_rec_flg = 1
+                        AND port.brnch_seq = :brnch_seq
+           WHERE ap.crnt_rec_flg = 1 AND ap.loan_app_sts = 703)
+             prt_cnt,
+         (SELECT COUNT (DISTINCT clnt_seq)
+            FROM mw_loan_app ap
+                 JOIN mw_acl acl
+                     ON acl.port_seq = ap.port_seq AND acl.user_id = :userId
+           WHERE     crnt_rec_flg = 1
+                 AND loan_app_sts = 703
+                 AND ap.prd_seq = app.prd_seq
+                 AND TRUNC (loan_app_sts_dt) BETWEEN TRUNC(SYSDATE, 'MM') AND
+                            TRUNC(LAST_DAY(sysdate)))
+             achvd_clnt,
+         (SELECT SUM (aprvd_loan_amt)
+            FROM mw_loan_app ap
+                 JOIN mw_acl acl
+                     ON acl.port_seq = ap.port_seq AND acl.user_id = :userId
+           WHERE     crnt_rec_flg = 1
+                 AND loan_app_sts = 703
+                 AND ap.prd_seq = app.prd_seq
+                 AND TRUNC (loan_app_sts_dt) BETWEEN TRUNC(SYSDATE, 'MM') AND
+                            TRUNC(LAST_DAY(sysdate)))
+             achvd_amt
+    FROM mw_loan_app app
+         JOIN mw_port prt
+             ON prt.port_seq = app.port_seq AND prt.crnt_rec_flg = 1
+         JOIN mw_prd prd ON prd.prd_seq = app.prd_seq AND prd.crnt_rec_flg = 1
+         JOIN mw_brnch_prd_rel brl
+             ON     brl.prd_seq = app.prd_seq
+                AND brl.crnt_rec_flg = 1
+                AND brl.brnch_seq = :brnch_seq
+         JOIN mw_acl acl
+             ON acl.port_seq = app.port_seq AND acl.user_id = :userId
+         LEFT OUTER JOIN
+         (  SELECT tgt.prd_seq,
+                   SUM (ptg.trgt_clnts)     trgt_clients,
+                   SUM (ptg.trgt_amt)       trgt_amt
+              FROM mw_brnch_trgt tgt
+                   JOIN mw_port_trgt ptg
+                       ON     ptg.brnch_trgts_seq = tgt.brnch_targets_seq
+                          AND ptg.del_flg = 0
+                   JOIN mw_acl acl
+                       ON acl.port_seq = ptg.port_seq AND acl.user_id = :userId
+             WHERE     tgt.del_flg = 0
+                   AND tgt.trgt_perd = TO_CHAR (TO_DATE (SYSDATE), 'YYYYMM')
+          GROUP BY tgt.prd_seq) tgt
+             ON tgt.prd_seq = prd.prd_grp_seq
+   WHERE app.crnt_rec_flg = 1 AND app.loan_app_sts = 703
+   AND NOT EXISTS
+                        (SELECT ctl.loan_app_seq
+                           FROM mw_clnt_tag_list ctl
+                          WHERE     ctl.loan_app_seq = app.loan_app_seq
+                                AND TRUNC (ctl.eff_start_dt) <= TRUNC(SYSDATE)
+                                AND ctl.tags_seq = 4
+                                AND ctl.crnt_rec_flg = 1)
+GROUP BY prd.prd_cmnt, app.prd_seq

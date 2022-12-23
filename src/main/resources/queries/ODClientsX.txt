@@ -1,0 +1,26 @@
+select 1 rpt_flg, clnt.clnt_id clnt_id, clnt.frst_nm || ' ' || clnt.last_nm clnt_nm,
+                nvl(fthr_frst_nm,spz_frst_nm) ||' ' || nvl(fthr_last_nm,spz_last_nm) fs_nm, clnt.ph_num,
+                                'St. '||adr.strt||' '||'H. ' ||adr.hse_num||' '||adr.oth_dtl||' '|| cty.city_nm addr, vhdr.dsbmt_dt dsbmt_dt,
+                                ap.aprvd_loan_amt dsbmt_amt, prd.prd_nm, loan_app_ost(ap.loan_app_seq,sysdate,'ri') ost_inst_num,
+                                loan_app_ost(ap.loan_app_seq,sysdate,'p') ost_inst_prncp,
+                                loan_app_ost(ap.loan_app_seq,sysdate,'s') ost_inst_srvc,
+                                get_od_info(ap.loan_app_seq,sysdate,'i') od_inst_num, get_od_info(ap.loan_app_seq,sysdate,'psc') od_amt,
+                                get_od_info(ap.loan_app_seq,sysdate,'d') od_days , ap.loan_app_seq,(select max(pymt_dt) from mw_rcvry_trx trx where trx.crnt_rec_flg=1 and trx.pymt_ref=clnt.clnt_seq), emp.emp_nm, clnt.cnic_num
+                /*Get_loan_completion_date(clnt.clnt_seq, :Branch)*/  
+                from mw_clnt clnt 
+                join mw_addr_rel adrl on adrl.enty_key=clnt.clnt_seq and adrl.enty_typ='Client' and adrl.crnt_rec_flg=1 
+                join mw_addr adr on adr.addr_seq=adrl.addr_seq and adr.crnt_rec_flg=1 
+                join mw_city_uc_rel ucrl on ucrl.city_uc_rel_seq=adr.city_seq and ucrl.crnt_rec_flg=1 
+                join mw_city cty on cty.city_seq=ucrl.city_seq and cty.crnt_rec_flg=1 
+                join mw_port prt on prt.port_seq=clnt.port_key and prt.crnt_rec_flg=1 
+                join mw_port_emp_rel erl on erl.port_seq=prt.port_seq and erl.crnt_rec_flg=1 
+                join mw_emp emp on emp.emp_seq=erl.emp_seq 
+                join mw_loan_app ap on ap.clnt_seq=clnt.clnt_seq and ap.crnt_rec_flg=1 
+                join mw_prd prd on prd.prd_seq=ap.prd_seq and prd.crnt_rec_flg=1 
+                join mw_dsbmt_vchr_hdr vhdr on vhdr.loan_app_seq = ap.loan_app_seq and vhdr.crnt_rec_flg=1 and vhdr.DSBMT_VCHR_TYP=0
+                join mw_pymt_sched_hdr phdr on phdr.loan_app_seq=ap.loan_app_seq and phdr.crnt_rec_flg=1 
+                join mw_ref_cd_val lsts on lsts.ref_cd_seq=ap.loan_app_sts and lsts.crnt_rec_flg=1 
+                join mw_port_emp_rel erl on erl.port_seq=prt.port_seq and erl.crnt_rec_flg=1 
+                join mw_emp emp on emp.emp_seq=erl.emp_seq  where clnt.crnt_rec_flg=1  and lsts.ref_cd='0005'
+                 and get_od_info(ap.loan_app_seq,TO_DATE(sysdate),'ps') > 0 and prt.%REPLACE% 
+                 order by port_nm,od_days desc

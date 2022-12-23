@@ -1,0 +1,90 @@
+/* Formatted on 7/14/2022 12:36:19 PM (QP5 v5.326) */
+SELECT chk_nm,
+       (CASE
+            WHEN chk_flg = 5
+            THEN
+                (SELECT COUNT (app.loan_app_seq)     ACHVD_CHKS
+                   FROM mw_loan_app  app
+                        JOIN mw_acl acl
+                            ON     acl.port_seq = app.port_seq
+                               AND acl.user_id = :userId
+                        JOIN mw_dsbmt_vchr_hdr dvh
+                            ON     dvh.loan_app_seq = app.loan_app_seq
+                               AND dvh.crnt_rec_flg = 1
+                  WHERE     app.crnt_rec_flg = 1
+                        AND loan_cycl_num > 1
+                        AND app.tbl_scrn_flg = 1
+                        AND loan_app_sts = 703
+                        AND TRUNC (dsbmt_dt) BETWEEN TRUNC(SYSDATE, 'MM') AND
+                            TRUNC(LAST_DAY(sysdate)))
+            ELSE
+                (SELECT COUNT (DISTINCT clnt_seq)     ACHVD_CHKS
+                   FROM mw_loan_app  app
+                        JOIN mw_loan_app_mntrng_chks chk
+                            ON     chk.loan_app_seq = app.loan_app_seq
+                               AND chk.crnt_rec_flg = 1
+                               AND chk.chk_flg = trgt.chk_flg
+                  WHERE     app.crnt_rec_flg = 1
+                        AND TRUNC (chk.crtd_dt) BETWEEN TRUNC(SYSDATE, 'MM') AND
+                            TRUNC(LAST_DAY(sysdate))
+                        AND app.loan_app_sts = 703
+                        AND chk.crtd_by LIKE '%' || :userId)
+        END)
+           ach,
+       CASE
+           WHEN chk_flg = 2
+           THEN
+               ROUND (
+                     (SELECT COUNT (DISTINCT app.loan_app_seq)
+                        FROM mw_loan_app  app
+                             JOIN mw_acl acl
+                                 ON     acl.port_seq = app.port_seq
+                                    AND acl.user_id = :userId
+                             JOIN mw_dsbmt_vchr_hdr dvh
+                                 ON     dvh.loan_app_seq = app.loan_app_seq
+                                    AND dvh.crnt_rec_flg = 1
+                       WHERE     app.crnt_rec_flg = 1
+                             AND app.prd_seq = 22
+                             AND TRUNC (dsbmt_dt) BETWEEN TRUNC(ADD_MONTHS (SYSDATE, -1), 'MM') AND TRUNC(LAST_DAY(ADD_MONTHS (SYSDATE, -1)))
+                             AND loan_app_sts = 703)
+                   * trgt.chk_trgt
+                   / 100,
+                   0)
+           WHEN chk_flg = 5
+           THEN
+               ROUND (
+                     (SELECT COUNT (DISTINCT app.loan_app_seq)
+                        FROM mw_loan_app  app
+                             JOIN mw_acl acl
+                                 ON     acl.port_seq = app.port_seq
+                                    AND acl.user_id = :userId
+                             JOIN mw_dsbmt_vchr_hdr dvh
+                                 ON     dvh.loan_app_seq = app.loan_app_seq
+                                    AND dvh.crnt_rec_flg = 1
+                       WHERE     app.crnt_rec_flg = 1
+                             AND TRUNC (dsbmt_dt) BETWEEN TRUNC(ADD_MONTHS (SYSDATE, -1), 'MM') AND TRUNC(LAST_DAY(ADD_MONTHS (SYSDATE, -1)))
+                             AND app.prnt_loan_app_seq = app.loan_app_seq
+                             AND loan_app_sts = 703)
+                   * trgt.chk_trgt
+                   / 100,
+                   0)
+           ELSE
+               trgt.chk_trgt
+       END
+           trgt
+  FROM mw_loan_app_mntrng_chk_trgt trgt
+ WHERE trgt.crnt_rec_flg = 1 AND chk_flg <> 4
+UNION
+SELECT trgt.chk_nm, achvd_chks, trgt.chk_trgt
+  FROM mw_loan_app_mntrng_chk_trgt  trgt
+       CROSS JOIN
+       (SELECT COUNT (1)     ACHVD_CHKS
+          FROM MW_MNTRNG_CHKS_ADC  chk
+               JOIN mw_brnch_emp_rel erl
+                   ON erl.brnch_seq = chk.brnch_seq AND erl.crnt_rec_flg = 1
+               JOIN mw_emp emp
+                   ON emp.emp_seq = erl.emp_seq AND emp.emp_lan_id = :userId
+         WHERE     chk.crnt_rec_flg = 1
+               AND TRUNC (chk.crtd_dt) BETWEEN TRUNC(SYSDATE, 'MM') AND
+                            TRUNC(LAST_DAY(sysdate)))
+ WHERE trgt.crnt_rec_flg = 1 AND chk_flg = 4

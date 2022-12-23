@@ -1,0 +1,4 @@
+select *
+from MW_OD_CRDT_RPT_DASHBRD_TBL gtl
+where od_amt > 0
+ ORDER BY 18, 15 DESC NULLS LAST

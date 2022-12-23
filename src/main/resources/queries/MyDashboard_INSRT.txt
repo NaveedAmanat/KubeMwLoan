@@ -1,0 +1,326 @@
+/* Formatted on 5/20/2022 11:51:49 AM (QP5 v5.326) */
+INSERT INTO myDashboard
+
+SELECT COUNT (DISTINCT clnt_seq)
+           act_clnt,
+       SUM (loan_app_ost (app.loan_app_seq, SYSDATE, 'psc'))
+           ost_amt,
+       SUM (
+           CASE
+               WHEN get_od_info (app.loan_app_seq, TO_DATE (SYSDATE), 'd') >
+                    29
+               THEN
+                   loan_app_ost (app.loan_app_seq, TO_DATE (SYSDATE), 'psc')
+               ELSE
+                   0
+           END)
+           par_30,
+       SUM (
+           CASE
+               WHEN get_od_info (app.loan_app_seq, TO_DATE (SYSDATE), 'psc') >
+                    0
+               THEN
+                   loan_app_ost (app.loan_app_seq, TO_DATE (SYSDATE), 'psc')
+               ELSE
+                   0
+           END)
+           par_1,
+       MAX (
+           (SELECT COUNT (clnt.clnt_id)
+              FROM mw_clnt  clnt
+                   JOIN mw_loan_app la ON clnt.clnt_seq = la.clnt_seq
+                   JOIN mw_port prt ON prt.port_seq = la.port_seq
+                   JOIN mw_dsbmt_vchr_hdr dvh
+                       ON dvh.loan_app_seq = la.loan_app_seq
+                   JOIN mw_pymt_sched_hdr psh
+                       ON psh.loan_app_seq = la.loan_app_seq
+                   JOIN mw_pymt_sched_dtl psd
+                       ON psd.pymt_sched_hdr_seq = psh.pymt_sched_hdr_seq
+                   JOIN mw_Acl acl ON prt.port_seq = acl.port_seq
+             WHERE     clnt.crnt_Rec_Flg = 1
+                   AND la.crnt_rec_flg = 1
+                   AND prt.crnt_rec_flg = 1
+                   AND dvh.crnt_rec_Flg = 1
+                   AND psh.crnt_rec_flg = 1
+                   AND psd.crnt_rec_flg = 1
+                   AND la.loan_app_sts = 703
+                   AND TRUNC (psd.DUE_DT) = TO_DATE (SYSDATE)
+                   AND acl.user_id = :userId
+                   AND prt.brnch_seq = :BRNCH_SEQ
+                   AND   (  NVL (psd.ppal_amt_due, 0)
+                          + NVL (psd.tot_chrg_due, 0)
+                          + NVL (
+                                (SELECT SUM (psc.amt)
+                                   FROM mw_pymt_sched_chrg psc
+                                  WHERE     psc.pymt_sched_dtl_seq =
+                                            psd.pymt_sched_dtl_seq
+                                        AND psc.crnt_rec_flg = 1),
+                                0))
+                       - NVL (
+                             ((SELECT SUM (NVL (rdtl.pymt_amt, 0))     rec
+                                 FROM mw_rcvry_dtl rdtl, mw_rcvry_trx trx
+                                WHERE     rdtl.pymt_sched_dtl_seq =
+                                          psd.pymt_sched_dtl_seq
+                                      AND rdtl.crnt_rec_flg = 1
+                                      AND rdtl.rcvry_trx_seq =
+                                          trx.rcvry_trx_seq
+                                      AND trx.crnt_rec_flg = 1
+                                      AND trx.pymt_ref = la.clnt_seq)),
+                             0) >
+                       0))
+           due_clnts,
+       ROUND (
+             MAX (
+                 (SELECT (  COUNT (
+                                (CASE
+                                     WHEN (  TO_DATE (vdh.DSBMT_DT)
+                                           - lst_loan_cmpltn_dt (
+                                                 ap.loan_app_Seq)) BETWEEN 1
+                                                                       AND 14
+                                     THEN
+                                         1
+                                     ELSE
+                                         NULL
+                                 END))
+                          / NVL (NULLIF (COUNT (ap.clnt_seq), 0), 1))
+                             tat
+                    FROM mw_loan_app  ap
+                         JOIN mw_dsbmt_vchr_hdr vdh
+                             ON     vdh.loan_app_seq = ap.loan_app_seq
+                                AND vdh.crnt_rec_flg = 1
+                         JOIN mw_acl acl
+                             ON     acl.port_seq = ap.port_seq
+                                AND acl.user_Id = :userId
+                   WHERE     ap.crnt_rec_flg = 1
+                         AND ap.loan_app_sts = 703
+                         AND ap.loan_cycl_num > 1
+                         AND ap.prd_seq NOT IN (2,
+                                                3,
+                                                5,
+                                                13,
+                                                14,
+                                                29)
+                         AND TRUNC (vdh.DSBMT_DT) BETWEEN TRUNC (SYSDATE,
+                                                                 'month')
+                                                      AND TO_DATE (SYSDATE)))
+           * 100,
+           2)
+           tat,
+       ROUND (
+             MAX (
+                 (SELECT   COUNT (
+                               CASE
+                                   WHEN loan_cycl_num > 1 THEN ap.clnt_seq
+                                   ELSE NULL
+                               END)
+                         / NVL (NULLIF (COUNT (DISTINCT ap.clnt_seq), 0), 1)
+                             ddd
+                    FROM mw_loan_app  ap
+                         JOIN mw_dsbmt_vchr_hdr vdh
+                             ON     vdh.loan_app_seq = ap.loan_app_seq
+                                AND vdh.crnt_rec_flg = 1
+                         JOIN mw_acl acl
+                             ON     acl.port_seq = ap.port_seq
+                                AND acl.user_Id = :userId
+                   WHERE     ap.crnt_rec_flg = 1
+                         AND ap.loan_app_sts = 703
+                         AND ap.prd_seq NOT IN (2,
+                                                3,
+                                                5,
+                                                13,
+                                                14,
+                                                29)
+                         AND TRUNC (vdh.DSBMT_DT) BETWEEN TRUNC (SYSDATE,
+                                                                 'month')
+                                                      AND TO_DATE (SYSDATE)))
+           * 100,
+           2)
+           ror,
+       SUM (
+           CASE
+               WHEN get_od_info (app.loan_app_seq, SYSDATE, 'psc') > 0 THEN 1
+               ELSE 0
+           END)
+           od_clnt,
+       SUM (
+           CASE
+               WHEN get_od_info (app.loan_app_seq, SYSDATE, 'psc') > 0
+               THEN
+                   get_od_info (app.loan_app_seq, SYSDATE, 'ps')
+               ELSE
+                   0
+           END)
+           od_amt,
+       SUM (
+           CASE WHEN app.loan_cycl_num = 1 THEN app.aprvd_loan_amt ELSE 0 END)
+           new_clnt_dsbmt_amt,
+       SUM (
+           CASE WHEN app.loan_cycl_num > 1 THEN app.aprvd_loan_amt ELSE 0 END)
+           rpt_clnt_dsbmt_amt,
+       SUM (
+           CASE
+               WHEN wp.ref_cd_dscr = 'SELF' AND app.loan_cycl_num = 1 THEN 1
+               ELSE 0
+           END)
+           new_fp_cnt,
+       SUM (
+           CASE
+               WHEN wp.ref_cd_dscr = 'SELF' AND app.loan_cycl_num > 1 THEN 1
+               ELSE 0
+           END)
+           rpt_fp_cnt,
+       SUM (
+           CASE
+               WHEN get_od_info (app.loan_app_seq, SYSDATE, 'psc') > 0
+               THEN
+                   get_od_info (app.loan_app_seq, SYSDATE, 'psc')
+               ELSE
+                   0
+           END)
+           od_amt_1_day,
+       SUM (
+           CASE
+               WHEN get_od_info (app.loan_app_seq, SYSDATE, 'd') > 29
+               THEN
+                   get_od_info (app.loan_app_seq, SYSDATE, 'psc')
+               ELSE
+                   0
+           END)
+           od_amt_30_day,
+       MAX (
+           (SELECT COUNT (app.clnt_seq)
+              FROM mw_loan_app  app
+                   JOIN mw_acl acl
+                       ON     acl.port_seq = app.port_seq
+                          AND acl.user_Id = :userId
+                   JOIN mw_port prt
+                       ON     prt.port_seq = app.port_seq
+                          AND prt.crnt_rec_flg = 1
+                   JOIN mw_dsbmt_vchr_hdr hdr
+                       ON     hdr.loan_app_seq = app.loan_app_seq
+                          AND hdr.crnt_rec_flg = 1
+             WHERE     app.crnt_rec_flg = 1
+                   AND TRUNC (hdr.dsbmt_dt) BETWEEN TRUNC (
+                                                        ADD_MONTHS (SYSDATE,
+                                                                    -1))
+                                                AND TO_DATE (SYSDATE)
+                   AND NOT EXISTS
+                           (SELECT NULL
+                              FROM mw_loan_app_mntrng_chks chk
+                             WHERE     chk.crnt_rec_flg = 1
+                                   AND chk_flg = 1
+                                   AND chk.loan_app_seq = app.loan_app_seq)))
+           utl_chk,
+       MAX (
+           (SELECT COUNT (la.clnt_seq)
+              FROM mw_loan_app  la
+                   JOIN mw_acl acl ON la.port_seq = acl.port_seq
+             WHERE     la.CRNT_REC_FLG = 1
+                   AND la.eff_start_dt =
+                       (SELECT MAX (ap.eff_start_dt)
+                          FROM mw_loan_app ap
+                         WHERE     ap.crnt_rec_flg = 1
+                               AND ap.loan_app_seq = la.loan_app_seq)
+                   AND acl.USER_ID = :userId
+                   AND NOT EXISTS
+                           (SELECT 1
+                              FROM MW_DSBMT_VCHR_HDR dvh, mw_loan_app ap
+                             WHERE     ap.LOAN_APP_SEQ = dvh.LOAN_APP_SEQ
+                                   AND ap.CLNT_SEQ = la.CLNT_SEQ
+                                   AND ap.PRD_SEQ = la.PRD_SEQ
+                                   AND ap.CRNT_REC_FLG = 1
+                                   AND dvh.crnt_rec_flg = 1
+                                   AND TRUNC (dvh.DSBMT_DT) >
+                                       TRUNC (ADD_MONTHS (SYSDATE, -1)))
+                   AND la.LOAN_APP_STS = 704
+                   AND NOT EXISTS
+                           (SELECT NULL
+                              FROM mw_loan_app ap
+                             WHERE     ap.crnt_rec_flg = 1
+                                   AND ap.loan_app_sts = 703
+                                   AND ap.clnt_seq = la.clnt_seq)
+                   AND TRUNC (la.LOAN_APP_STS_DT) BETWEEN TRUNC (
+                                                                ADD_MONTHS (
+                                                                    SYSDATE,
+                                                                    -1))
+                                                        AND TO_DATE (SYSDATE)))
+           pnd_clnt,
+       MAX (
+           (SELECT SUM (prj_clnt)
+              FROM (  SELECT COUNT (DISTINCT ap.clnt_seq)     prj_clnt
+                        FROM mw_pymt_sched_hdr psh
+                             JOIN mw_pymt_sched_dtl psd
+                                 ON     psh.pymt_sched_hdr_seq =
+                                        psd.pymt_sched_hdr_seq
+                                    AND psd.crnt_rec_flg = 1
+                             JOIN mw_loan_app ap
+                                 ON     ap.loan_app_seq = psh.loan_app_seq
+                                    AND ap.crnt_rec_flg = 1
+                             JOIN mw_acl acl
+                                 ON     acl.port_seq = ap.port_seq
+                                    AND acl.user_Id = :userId
+                       WHERE psh.crnt_rec_flg = 1 AND ap.loan_app_sts = 703
+                    GROUP BY psh.loan_app_seq
+                      HAVING MAX (due_dt) - SYSDATE BETWEEN 0 AND 30)))
+           prj_clnt,
+       COUNT (
+           DISTINCT CASE
+                        WHEN app.loan_cycl_num = 1 THEN app.clnt_seq
+                        ELSE NULL
+                    END)
+           new_clnt,
+       COUNT (
+           DISTINCT CASE
+                        WHEN app.loan_cycl_num > 1 THEN app.clnt_seq
+                        ELSE NULL
+                    END)
+           rpt_clnt,
+       COUNT (CASE
+                  WHEN     PRD.prd_GRP_seq IN (1,
+                                               6,
+                                               5765,
+                                               16)
+                       AND app.loan_cycl_num = 1
+                  THEN
+                      app.clnt_seq
+                  ELSE
+                      NULL
+              END)
+           new_clnt_1,
+       COUNT (CASE
+                  WHEN     PRD.prd_GRP_seq IN (1,
+                                               6,
+                                               5765,
+                                               16)
+                       AND app.loan_cycl_num > 1
+                  THEN
+                      app.clnt_seq
+                  ELSE
+                      NULL
+              END)
+           rpt_clnt_1
+  FROM mw_loan_app  app
+       JOIN mw_prd prd ON app.prd_seq = prd.prd_seq
+       JOIN mw_acl acl
+           ON acl.port_seq = app.port_seq AND acl.user_Id = :userId
+       LEFT JOIN mw_biz_aprsl aprsl
+           ON     aprsl.loan_app_seq = app.loan_app_seq
+              AND aprsl.crnt_rec_flg = 1
+       LEFT JOIN mw_ref_cd_val wp
+           ON wp.ref_cd_seq = aprsl.prsn_run_the_biz AND wp.crnt_rec_flg = 1
+ WHERE     app.crnt_rec_flg = 1
+       AND NOT EXISTS
+               (SELECT ctl.loan_app_seq
+                  FROM mw_clnt_tag_list ctl
+                 WHERE     ctl.loan_app_seq = app.loan_app_seq
+                       AND TRUNC (ctl.eff_start_dt) <= TRUNC (SYSDATE)
+                       AND ctl.tags_seq = 4
+                       AND ctl.crnt_rec_flg = 1)
+       AND loan_app_sts = 703
+       
+       
+       
+       
+       
+       
+       
