@@ -6,7 +6,7 @@
     <groupId>com.idev4.loans</groupId>
     <artifactId>loanservice</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <packaging>war</packaging>
+    <packaging>jar</packaging>
     <!-- <packaging>jar</packaging> -->
     <name>Loanservice</name>
 
