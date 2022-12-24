@@ -13,7 +13,6 @@ mvnw
 mvnw.cmd
 package.json
 yarn.lock
-pom.xml
 
 ######################
 # Node
